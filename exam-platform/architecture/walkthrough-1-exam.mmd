@@ -1,0 +1,34 @@
+sequenceDiagram
+    autonumber
+    actor S as Student browser
+    participant CF as CloudFront + WAF
+    participant S3F as S3 frontend
+    participant CG as Cognito
+    participant ALB as ALB
+    participant API as API task (Fargate)
+    participant DB as RDS PostgreSQL (Multi-AZ)
+    participant Q as SQS marking queue
+    participant M as marking-fn (Lambda)
+
+    S->>CF: GET / (HTTPS)
+    CF->>S3F: fetch page (cached at the edge)
+    S-->>CG: sign in (email + password)
+    CG-->>S: ID token (JWT, contains the group "student")
+    S->>CF: POST /api/exams/12/start + Bearer token
+    CF->>ALB: forward (adds secret header, WAF checked it)
+    ALB->>API: pick a healthy task in either AZ
+    API->>API: verify JWT signature, check role = student
+    API->>DB: check exam window, create attempt, fixed deadline
+    DB-->>API: attempt id + questions
+    API-->>S: questions (no correct answers) + server deadline
+    loop every 30 seconds
+        S->>API: PUT /api/attempts/57/answers (changed answers only)
+        API->>DB: upsert answers (idempotent)
+        API-->>S: saved at hh:mm:ss
+    end
+    S->>API: POST /api/attempts/57/submit
+    API->>DB: status = submitted
+    API->>Q: send {attemptId: 57}
+    API-->>S: 202 Accepted
+    Q->>M: deliver message
+    M->>DB: score the MCQ answers, status = marked

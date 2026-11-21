@@ -1,0 +1,8 @@
+# copy to terraform.tfvars and edit
+region           = "ap-south-1"
+ses_sender_email = "exams-noreply@example.edu"
+alarm_email      = "cloud-admin@example.edu"
+
+# optional: custom domain for HTTPS end to end (needs a Route 53 hosted zone)
+# domain_name    = "exams.example.edu"
+# hosted_zone_id = "Z0123456789ABCDEFGHIJ"

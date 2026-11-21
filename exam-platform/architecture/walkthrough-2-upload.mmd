@@ -1,0 +1,28 @@
+sequenceDiagram
+    autonumber
+    actor S as Student browser
+    participant API as API task (Fargate)
+    participant DB as RDS PostgreSQL
+    participant S3 as S3 uploads bucket
+    participant Q as SQS uploads queue
+    participant U as upload-fn (Lambda)
+    participant EQ as SQS email queue
+    participant E as email-fn (Lambda)
+    participant SES as Amazon SES
+    actor T as Tutor
+
+    S->>API: POST /api/uploads/presign (name, type, size = 40 MB)
+    API->>API: check PDF/ZIP, max 50 MB, assignment exists
+    API->>DB: insert submission row (status = pending)
+    API-->>S: presigned POST (URL + signed fields, valid 5 min)
+    S->>S3: POST the 40 MB file directly (never touches the API)
+    S3->>S3: enforce size limit and content type, encrypt, store
+    S3-)Q: ObjectCreated event
+    Q->>U: deliver event
+    U->>DB: status = received, size, time
+    U->>EQ: send email request for the tutor
+    EQ->>E: deliver message
+    E->>SES: SendEmail
+    SES-->>T: "New submission: Assignment 2"
+    S->>API: GET /api/submissions/id (polls every 2 s)
+    API-->>S: status = received, your tutor has been notified
